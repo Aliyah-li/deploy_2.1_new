@@ -1,0 +1,104 @@
+#!/bin/bash
+set -e
+
+# ============================================================
+# fft_simulation.sh — FFT Sim2Sim Launch Script
+# ============================================================
+#
+# Launches:
+#   1. FFT RL Deploy (C++ inference — single ONNX policy)
+#   2. MuJoCo Simulation (Python)
+#
+# FFT policy features:
+#   - Single ONNX model (58-dim obs → 16-dim action)
+#   - Height command 0.32–0.425 m; fixed URDF action reference
+#   - Velocity command at obs[6:9]; height command separately at obs[57]
+#   - 50 Hz control rate
+#
+# Usage:
+#   ./fft_simulation/fft_simulation.sh [x86|aarch64]
+#   RECORD_QPOS_PATH=/tmp/qpos.npz ./fft_simulation/fft_simulation.sh  # with qpos recording
+# ============================================================
+
+cd "$(dirname "$0")/.."
+
+PLATFORM=${1:-x86}
+ONNXRUNTIME_LIB="src/M20_sdk_deploy/third_party/onnxruntime/${PLATFORM}/lib"
+CONDA_SH=""
+ROS_ENV_SETUP=""
+
+if [ -f /home/ubuntu/miniconda3/etc/profile.d/conda.sh ]; then
+  CONDA_SH=/home/ubuntu/miniconda3/etc/profile.d/conda.sh
+elif [ -f /home/john/Anaconda/etc/profile.d/conda.sh ]; then
+  CONDA_SH=/home/john/Anaconda/etc/profile.d/conda.sh
+fi
+
+export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1}
+export LD_LIBRARY_PATH="${ONNXRUNTIME_LIB}:${LD_LIBRARY_PATH:-}"
+
+if [ -f /opt/ros/humble/setup.bash ]; then
+  source /opt/ros/humble/setup.bash
+  ROS_ENV_SETUP="source /opt/ros/humble/setup.bash"
+elif [ -n "${CONDA_SH}" ]; then
+  source "${CONDA_SH}"
+  conda activate ros2_jazzy || true
+  ROS_ENV_SETUP="source ${CONDA_SH}; conda activate ros2_jazzy"
+fi
+
+if command -v ros2 >/dev/null 2>&1; then
+  source install/setup.bash
+
+  # ── Terminal 1: RL Deploy (keyboard works HERE) ──
+  gnome-terminal --tab --title="RL Deploy (FFT)" -- bash -lc "
+    cd '$PWD';
+    export ROS_DOMAIN_ID=$ROS_DOMAIN_ID;
+    export LD_LIBRARY_PATH='$ONNXRUNTIME_LIB':\${LD_LIBRARY_PATH:-};
+    $ROS_ENV_SETUP;
+    source install/setup.bash;
+    export POLICY_SUBDIR=fft;
+    ros2 run m20_sdk_deploy rl_deploy_fft 2>&1 | tee /tmp/fft_debug.log | python3 monitor_ui.py;
+    echo '--- RL Deploy finished. Debug log: /tmp/fft_debug.log ---';
+    echo '--- Press Enter to close ---';
+    read
+  "
+
+  # ── Terminal 2: MuJoCo Sim ──
+  gnome-terminal --tab --title="MuJoCo Sim" -- bash -lc "
+    cd '$PWD';
+    export ROS_DOMAIN_ID=$ROS_DOMAIN_ID;
+    export RECORD_QPOS_PATH='${RECORD_QPOS_PATH:-}';
+    export RECORD_QPOS_INTERVAL='${RECORD_QPOS_INTERVAL:-50}';
+    export START_X='${START_X:-0}';
+    export START_Y='${START_Y:-0}';
+    export START_Z='${START_Z:-0.2}';
+    $ROS_ENV_SETUP;
+    source install/setup.bash;
+    python3 src/M20_sdk_deploy/interface/robot/simulation/mujoco_simulation_ros2.py;
+    echo '--- MuJoCo finished. Press Enter to close ---';
+    read
+  "
+
+  echo "Launched RL Deploy (FFT) + MuJoCo Simulation."
+  echo ""
+  echo "┌──────────────────────────────────────────────────┐"
+  echo "│ 键盘敲在 'RL Deploy (FFT)' 终端里！              │"
+  echo "│ [STATUS] 行会直接显示在这个终端                   │"
+  echo "└──────────────────────────────────────────────────┘"
+  echo ""
+  echo "Controls:"
+  echo "  Height:   W (up) / S (down)   0.32 – 0.425 m"
+  echo "  Yaw:      hold A (left) / D (right)"
+  echo "  Move:     hold Q (current direction)"
+  echo "  Dir:      1(x) / 2(y) / 3(diagonal)"
+  echo "  Mode:     Z (stand) → C (RL control) → R (damping)"
+  echo ""
+  echo "If you want the curses monitor, run in a 3rd terminal:"
+  echo "  ./fft_simulation/fft_simulation.sh  # already launches MuJoCo"
+  echo "  tail -f /tmp/m20_fft_status.log | python3 monitor_ui.py"
+  echo ""
+  echo "To record qpos:"
+  echo "  RECORD_QPOS_PATH=/tmp/qpos.npz ./fft_simulation/fft_simulation.sh"
+else
+  echo "[WARN] ROS2 not found; cannot launch simulation."
+  echo "[WARN] Please install ROS2 Humble or source your ROS2 setup."
+fi

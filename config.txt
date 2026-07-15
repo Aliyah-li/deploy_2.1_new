@@ -1,0 +1,76 @@
+The deployed RL stack is centered on src/M20_sdk_deploy/run_policy/
+  m20_policy_runner.hpp:23.
+
+  Policy
+  The policy is an ONNX model run through ONNX Runtime. The runner supports two
+  contracts:
+
+  - Legacy policy: one input, obs, dim 57.
+  - History-VAE policy: two inputs, obs dim 58 and obs_history dim 610.
+
+  At runtime, src/M20_sdk_deploy/state_machine/quadruped_wheel/
+  rl_control_state.hpp:111 loads four policy files:
+
+  - policy/low_speed/policy.onnx
+  - policy/high_speed/x_rash/policy.onnx
+  - policy/high_speed/y_jump/policy.onnx
+  - policy/high_speed/diagonal/policy.onnx
+
+  Selection happens from user command:
+
+  - reserved_scale < 0.5: low-speed policy.
+  - reserved_scale >= 0.5: high-speed policy.
+  - Forward only defaults to x policy.
+  - Side only uses y policy.
+  - Forward + side uses diagonal policy.
+
+  The policy outputs 16 actions in policy joint order. Those are remapped back to
+  robot joint order, scaled, offset by default joint positions, then sent as hip/
+  knee position targets and wheel velocity targets.
+
+  Observations
+  For the history-VAE policy, obs is 58 values:
+
+  base_ang_vel * 0.25       3
+  projected_gravity         3
+  current_yaw               1
+  command                   3
+  joint_pos_rel             16
+  joint_vel * 0.05          16
+  last_action               16
+  total                     58
+
+  That is built in src/M20_sdk_deploy/run_policy/m20_policy_runner.hpp:283.
+
+  The obs_history input is 10 frames of 61 values each, flattened to 610:
+
+  base_lin_vel              3
+  base_ang_vel              3
+  projected_gravity         3
+  current_yaw               1
+  command                   3
+  joint_pos_rel             16
+  joint_vel                 16
+  last_action               16
+  frame total               61
+  history total             610
+
+  One important caveat: body-frame base_lin_vel is not available in this deploy
+  interface, so the runner fills it with zeros in src/M20_sdk_deploy/run_policy/
+  m20_policy_runner.hpp:253.
+
+  Network
+  The config describes the trained network as a HistoryVaeActor:
+
+  - Actor MLP: [512, 256, 128]
+  - Activation: ELU
+  - VAE latent dim: 8
+  - VAE encoder: [128, 64]
+  - VAE decoder: [128, 64]
+  - Policy uses VAE mean as input
+  - Critic MLP during training: [512, 256, 128]
+
+  That is recorded in src/M20_sdk_deploy/config/
+  mixed_terrains_history_vae_config.json:59. At deployment time only the exported
+  actor ONNX is used; the critic is training-side only.
+

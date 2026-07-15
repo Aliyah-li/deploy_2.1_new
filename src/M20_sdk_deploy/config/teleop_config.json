@@ -1,0 +1,35 @@
+{
+    "low_speed": {
+        "max_velocity": 1.25,
+        "acceleration": 1.25,
+        "duration_x":        0.9,
+        "duration_y":        0.8,
+        "duration_diagonal": 1.25
+    },
+
+    "high_speed": {
+        "max_velocity": 3.5,
+        "acceleration": 4.5,
+        "duration_x":        0.5,
+        "duration_y":        0.3,
+        "duration_diagonal": 0.65
+    },
+
+    "mixed": {
+        
+        "high_direction": {"name": "diagonal", "angle": -0.7854},
+        "duration_x":        0.5,
+        "duration_y":        0.3,
+        "duration_diagonal": 0.6
+    },
+
+    "key_directions": {
+        "1": {"name": "x",        "angle": 0.0},
+        "2": {"name": "y",        "angle": -1.5708},
+        "3": {"name": "diagonal", "angle": -2.3562}
+    }
+}
+
+
+# 45-0.7854; 135-2.3562; 30-0.5236; 60-1.0472
+# "high_direction": {"name": "y", "angle": 1.5708},

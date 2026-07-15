@@ -1,0 +1,95 @@
+{
+  "task": {
+    "source": "/home/ubuntu/active_suspension_mixed/source/active_suspension_mixed/active_suspension_mixed/tasks/suspension/mixed_terrains_history_vae",
+    "gym_ids": [
+      "mixedTerrains_historyVae_perceptive-v0",
+      "MixedTerrainsHistoryVae-Deeprobotics-M20-Active-Perceptive-Suspension-v0"
+    ],
+    "episode_length_s": 60.0
+  },
+  "terrain": {
+    "generator": "MIXED_TERRAINS_DEPTH_CAMERA_VAE_RING_CFG",
+    "layout": "8x8 mixed-terrain ring/grid",
+    "reset_pose_range": {
+      "x": [-3.2, -2.8],
+      "y": [0.0, 0.0],
+      "z": [0.0, 0.0],
+      "roll": [0.0, 0.0],
+      "pitch": [0.0, 0.0],
+      "yaw": [0.0, 0.0]
+    },
+    "command_range": {
+      "lin_vel_x": [0.0, 1.5],
+      "lin_vel_y": [0.0, 0.0],
+      "ang_vel_z": [0.0, 0.0],
+      "resampling_time_s": [5.0, 10.0]
+    }
+  },
+  "observations": {
+    "onnx_inputs": [
+      {"name": "obs", "dim": 58},
+      {"name": "obs_history", "dim": 610}
+    ],
+    "policy_obs_order": [
+      "base_ang_vel_scaled_0.25",
+      "projected_gravity",
+      "current_yaw",
+      "velocity_commands",
+      "joint_pos_rel_without_wheel",
+      "joint_vel_scaled_0.05",
+      "last_action"
+    ],
+    "history": {
+      "length": 10,
+      "flatten_history_dim": true,
+      "frame_dim": 61,
+      "frame_order": [
+        "base_lin_vel",
+        "base_ang_vel",
+        "projected_gravity",
+        "current_yaw",
+        "velocity_commands",
+        "joint_pos_rel",
+        "joint_vel",
+        "last_action"
+      ]
+    },
+    "deploy_note": "The current robot interface does not expose body-frame base linear velocity. The deploy runner fills history base_lin_vel with zeros unless a state-estimator source is added."
+  },
+  "network": {
+    "actor_class": "active_suspension_mixed.rsl_rl.history_vae:HistoryVaeActor",
+    "actor_hidden_dims": [512, 256, 128],
+    "activation": "elu",
+    "distribution": {"type": "Gaussian", "std_type": "log", "init_std": 1.0},
+    "vae": {
+      "latent_dim": 8,
+      "encoder_hidden_dims": [128, 64],
+      "decoder_hidden_dims": [128, 64],
+      "policy_input": "mean",
+      "velocity_target_dim": 3
+    },
+    "critic_hidden_dims": [512, 256, 128],
+    "obs_groups": {"actor": ["policy", "history"], "critic": ["critic"]}
+  },
+  "ppo": {
+    "num_steps_per_env": 24,
+    "max_iterations": 1500,
+    "num_learning_epochs": 5,
+    "num_mini_batches": 4,
+    "learning_rate": 0.001,
+    "gamma": 0.99,
+    "lambda": 0.95,
+    "entropy_coef": 0.01,
+    "desired_kl": 0.01,
+    "max_grad_norm": 1.0,
+    "velocity_reconstruction_loss_coef": 1.0,
+    "velocity_kl_loss_coef": 0.001
+  },
+  "rewards_and_terminations": {
+    "track_ang_vel_z_exp_weight": 0.0,
+    "world_lin_vel_y_l2_weight": -1.0,
+    "upside_down_l2_weight": -5.0,
+    "upside_down_termination_threshold": 0.2,
+    "line_goal_reached": false
+  }
+}
